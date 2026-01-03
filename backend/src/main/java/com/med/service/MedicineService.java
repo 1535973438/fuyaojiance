@@ -11,4 +11,5 @@ public interface MedicineService {
     Medicine update(Long id, Medicine medicine);
     void delete(Long id);
     double getDailyConsumption(Long medicineId);
+    List<MedicineDTO> getLowStockMedicines();
 }

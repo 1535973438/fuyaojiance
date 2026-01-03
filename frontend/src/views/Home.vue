@@ -36,14 +36,22 @@
           <div v-if="needInputTime" class="time-tip">
             超过设定时间两小时，请填写实际服用时间
           </div>
-          <div class="time-field">
+          <div v-if="needInputTime" class="time-fields">
+            <van-field
+              v-model="supplementDateDisplay"
+              is-link
+              readonly
+              label="日期"
+              placeholder="选择日期"
+              @click="showSupplementDatePicker = true"
+            />
             <van-field
               v-model="supplementTimeDisplay"
               is-link
               readonly
-              label="服用时间"
+              label="时间"
               placeholder="选择时间"
-              @click="showTimePicker = true"
+              @click="showSupplementTimePicker = true"
             />
           </div>
         </div>
@@ -53,17 +61,47 @@
       </div>
     </van-popup>
     
-    <!-- 时间选择器 -->
-    <van-popup v-model:show="showTimePicker" position="bottom">
-      <van-datetime-picker
-        v-model="currentTime"
-        type="datetime"
-        title="选择服用时间"
-        :min-date="new Date(currentSupplementRecord?.scheduledTime)"
-        @confirm="onTimeConfirm"
-        @cancel="showTimePicker = false"
+    <!-- 补服日期选择器 -->
+    <van-popup v-model:show="showSupplementDatePicker" position="bottom">
+      <van-date-picker
+        v-model="currentSupplementDate"
+        title="选择日期"
+        :min-date="minSupplementDate"
+        @confirm="onSupplementDateConfirm"
+        @cancel="showSupplementDatePicker = false"
       />
     </van-popup>
+    
+    <!-- 补服时间选择器 -->
+    <van-popup v-model:show="showSupplementTimePicker" position="bottom">
+      <van-time-picker
+        v-model="currentSupplementTime"
+        title="选择时间"
+        @confirm="onSupplementTimeConfirm"
+        @cancel="showSupplementTimePicker = false"
+      />
+    </van-popup>
+
+    <!-- 库存告警提示 -->
+    <div v-if="lowStockMedicines.length > 0" class="stock-warning-card">
+      <van-notice-bar
+        left-icon="warning-o"
+        :text="`${lowStockMedicines.length}种药品库存不足，请及时补充`"
+        color="#d46b08"
+        background="#fff7e6"
+        @click="handleStockWarningClick"
+      />
+      <div class="stock-warning-list">
+        <div
+          v-for="medicine in lowStockMedicines"
+          :key="medicine.id"
+          class="stock-warning-item"
+        >
+          <span class="medicine-name">{{ medicine.name }}</span>
+          <span class="stock-quantity">库存：{{ medicine.stockQuantity || 0 }}</span>
+        </div>
+      </div>
+    </div>
 
     <!-- 今日概览 -->
 <!--    <div class="card summary-card">-->
@@ -125,6 +163,7 @@
           </div>
           <div v-if="med.status === 'PENDING'" class="action-buttons">
             <van-button
+              v-if="!shouldShowSupplement(med)"
               type="primary"
               size="small"
               @click.stop="takeMed(med)"
@@ -132,6 +171,7 @@
               已服
             </van-button>
             <van-button
+              v-if="shouldShowSupplement(med)"
               type="default"
               size="small"
               @click.stop="showSupplementDialog(med)"
@@ -162,7 +202,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast } from 'vant'
-import { getTodayMedications, takeMedication, cancelTakeMedication, supplementRecord, getCompletionRate, getLatestChecks, logout } from '@/api'
+import { getTodayMedications, takeMedication, cancelTakeMedication, supplementRecord, getCompletionRate, getLatestChecks, logout, getLowStockMedicines } from '@/api'
 import dayjs from 'dayjs'
 
 const router = useRouter()
@@ -172,6 +212,7 @@ const refreshing = ref(false)
 const completionRate = ref(0)
 const latestCheck = ref(null)
 const showLogoutDialog = ref(false)
+const lowStockMedicines = ref([])
 const selectedDate = ref(dayjs().format('YYYY-MM-DD'))
 const showDatePicker = ref(false)
 const currentDate = ref([
@@ -181,11 +222,19 @@ const currentDate = ref([
 ])
 
 const showSupplementPopup = ref(false)
-const showTimePicker = ref(false)
+const showSupplementDatePicker = ref(false)
+const showSupplementTimePicker = ref(false)
 const currentSupplementRecord = ref(null)
 const needInputTime = ref(false)
+const supplementDateDisplay = ref('')
 const supplementTimeDisplay = ref('')
-const currentTime = ref(new Date())
+const currentSupplementDate = ref([
+  dayjs().year().toString(),
+  (dayjs().month() + 1).toString().padStart(2, '0'),
+  dayjs().date().toString().padStart(2, '0')
+])
+const currentSupplementTime = ref(['00', '00'])
+const minSupplementDate = ref(new Date())
 
 const todayDate = computed(() => dayjs().format('M月D日 dddd'))
 const greeting = computed(() => {
@@ -213,16 +262,26 @@ const formatTime = (time) => {
   return dayjs(time).format('HH:mm')
 }
 
+const shouldShowSupplement = (med) => {
+  if (!med.scheduledTime) return false
+  const scheduledTime = dayjs(med.scheduledTime)
+  const now = dayjs()
+  const hoursDiff = now.diff(scheduledTime, 'hour')
+  return hoursDiff > 2
+}
+
 const loadData = async () => {
   try {
-    const [meds, stats, checks] = await Promise.all([
+    const [meds, stats, checks, lowStock] = await Promise.all([
       getTodayMedications(selectedDate.value),
       getCompletionRate(),
-      getLatestChecks()
+      getLatestChecks(),
+      getLowStockMedicines()
     ])
 
     todayMedications.value = meds
     completionRate.value = stats.rate || 0
+    lowStockMedicines.value = lowStock || []
 
     if (checks && checks.length > 0) {
       const check = checks[0]
@@ -255,20 +314,40 @@ const showSupplementDialog = (med) => {
   
   if (needInputTime.value) {
     // 超过2小时，默认使用当前时间
-    currentTime.value = new Date()
-    supplementTimeDisplay.value = dayjs().format('YYYY-MM-DD HH:mm')
+    const nowDate = dayjs()
+    supplementDateDisplay.value = nowDate.format('YYYY-MM-DD')
+    supplementTimeDisplay.value = nowDate.format('HH:mm')
+    
+    currentSupplementDate.value = [
+      nowDate.year().toString(),
+      (nowDate.month() + 1).toString().padStart(2, '0'),
+      nowDate.date().toString().padStart(2, '0')
+    ]
+    currentSupplementTime.value = [
+      nowDate.hour().toString().padStart(2, '0'),
+      nowDate.minute().toString().padStart(2, '0')
+    ]
+    
+    // 设置最小日期为设定时间的日期
+    minSupplementDate.value = new Date(scheduledTime.format('YYYY-MM-DD'))
   } else {
-    currentTime.value = new Date()
+    supplementDateDisplay.value = ''
     supplementTimeDisplay.value = ''
   }
   
   showSupplementPopup.value = true
 }
 
-const onTimeConfirm = (value) => {
-  supplementTimeDisplay.value = dayjs(value).format('YYYY-MM-DD HH:mm')
-  currentTime.value = value
-  showTimePicker.value = false
+const onSupplementDateConfirm = ({ selectedValues }) => {
+  supplementDateDisplay.value = selectedValues.join('-')
+  currentSupplementDate.value = selectedValues
+  showSupplementDatePicker.value = false
+}
+
+const onSupplementTimeConfirm = ({ selectedValues }) => {
+  supplementTimeDisplay.value = selectedValues.join(':')
+  currentSupplementTime.value = selectedValues
+  showSupplementTimePicker.value = false
 }
 
 const confirmSupplement = async () => {
@@ -281,8 +360,8 @@ const confirmSupplement = async () => {
     }
     
     // 如果需要填写时间，添加actualTime
-    if (needInputTime.value && supplementTimeDisplay.value) {
-      data.actualTime = supplementTimeDisplay.value
+    if (needInputTime.value && supplementDateDisplay.value && supplementTimeDisplay.value) {
+      data.actualTime = `${supplementDateDisplay.value} ${supplementTimeDisplay.value}:00`
     }
     
     await supplementRecord(data)
@@ -341,6 +420,10 @@ const handleLogout = async () => {
     localStorage.removeItem('username')
     router.push('/login')
   }
+}
+
+const handleStockWarningClick = () => {
+  router.push('/medicines')
 }
 
 onMounted(() => {
@@ -522,7 +605,7 @@ onMounted(() => {
   margin-bottom: 16px;
 }
 
-.time-field {
+.time-fields {
   margin-top: 16px;
 }
 
@@ -546,5 +629,41 @@ onMounted(() => {
 
 .taken-status .van-icon {
   margin-right: 4px;
+}
+
+.stock-warning-card {
+  margin: 16px;
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.stock-warning-list {
+  padding: 12px 16px;
+}
+
+.stock-warning-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #f5f5f5;
+}
+
+.stock-warning-item:last-child {
+  border-bottom: none;
+}
+
+.stock-warning-item .medicine-name {
+  font-size: 14px;
+  color: #323233;
+  font-weight: 500;
+}
+
+.stock-warning-item .stock-quantity {
+  font-size: 14px;
+  color: #d46b08;
+  font-weight: 500;
 }
 </style>

@@ -6,6 +6,7 @@ export const getMedicine = (id) => request.get(`/medicines/${id}`)
 export const createMedicine = (data) => request.post('/medicines', data)
 export const updateMedicine = (id, data) => request.put(`/medicines/${id}`, data)
 export const deleteMedicine = (id) => request.delete(`/medicines/${id}`)
+export const getLowStockMedicines = () => request.get('/medicines/low-stock')
 
 // 服药计划
 export const getSchedules = () => request.get('/schedules')

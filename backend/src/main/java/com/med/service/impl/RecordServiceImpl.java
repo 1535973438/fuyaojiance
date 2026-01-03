@@ -234,6 +234,7 @@ public class RecordServiceImpl implements RecordService {
     }
 
     @Override
+    @Transactional
     public void generateDailyRecords(LocalDate date) {
         LocalDateTime startOfDay = date.atStartOfDay();
         LocalDateTime endOfDay = date.atTime(23, 59, 59);
@@ -243,19 +244,12 @@ public class RecordServiceImpl implements RecordService {
         scheduleWrapper.eq(MedicationSchedule::getIsActive, true);
         List<MedicationSchedule> schedules = scheduleMapper.selectList(scheduleWrapper);
 
-        // 查询当天已存在的记录，按计划ID分组
-        LambdaQueryWrapper<MedicationRecord> existingRecordsWrapper = new LambdaQueryWrapper<>();
-        existingRecordsWrapper.between(MedicationRecord::getScheduledTime, startOfDay, endOfDay);
-        List<MedicationRecord> existingRecords = recordMapper.selectList(existingRecordsWrapper);
-        Set<Long> existingScheduleIds = existingRecords.stream()
-                .map(MedicationRecord::getScheduleId)
-                .collect(Collectors.toSet());
-
         for (MedicationSchedule schedule : schedules) {
-            // 检查该计划是否已经生成了当天的记录
-            if (existingScheduleIds.contains(schedule.getId())) {
-                continue;
-            }
+            // 先删除该计划当天的所有记录（确保幂等性）
+            LambdaQueryWrapper<MedicationRecord> deleteWrapper = new LambdaQueryWrapper<>();
+            deleteWrapper.eq(MedicationRecord::getScheduleId, schedule.getId())
+                    .between(MedicationRecord::getScheduledTime, startOfDay, endOfDay);
+            recordMapper.delete(deleteWrapper);
 
             // 检查该计划是否应该在当天服药
             if (!shouldTakeMedicineOnDate(schedule, date)) {

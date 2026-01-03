@@ -7,6 +7,7 @@ import com.med.entity.MedicationSchedule;
 import com.med.entity.ScheduleMedicine;
 import com.med.mapper.MedicationScheduleMapper;
 import com.med.mapper.ScheduleMedicineMapper;
+import com.med.service.RecordService;
 import com.med.service.ScheduleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +27,7 @@ public class ScheduleServiceImpl implements ScheduleService {
 
     private final MedicationScheduleMapper scheduleMapper;
     private final ScheduleMedicineMapper scheduleMedicineMapper;
+    private final RecordService recordService;
 
     @Override
     public List<ScheduleDTO> listAll() {
@@ -69,7 +72,14 @@ public class ScheduleServiceImpl implements ScheduleService {
             }
         }
 
-        return getById(schedule.getId());
+        ScheduleDTO result = getById(schedule.getId());
+        
+        // 如果计划是活跃的，重新生成今天的记录
+        if (schedule.getIsActive() != null && schedule.getIsActive()) {
+            recordService.generateDailyRecords(LocalDate.now());
+        }
+        
+        return result;
     }
 
     @Override
@@ -100,7 +110,14 @@ public class ScheduleServiceImpl implements ScheduleService {
             }
         }
 
-        return getById(id);
+        ScheduleDTO result = getById(id);
+        
+        // 如果计划是活跃的，重新生成今天的记录
+        if (result.getIsActive() != null && result.getIsActive()) {
+            recordService.generateDailyRecords(LocalDate.now());
+        }
+        
+        return result;
     }
 
     @Override

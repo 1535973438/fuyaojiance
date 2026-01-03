@@ -41,4 +41,9 @@ public class MedicineController {
         medicineService.delete(id);
         return Result.success();
     }
+
+    @GetMapping("/low-stock")
+    public Result<List<MedicineDTO>> getLowStockMedicines() {
+        return Result.success(medicineService.getLowStockMedicines());
+    }
 }

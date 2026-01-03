@@ -60,6 +60,15 @@ public class MedicineServiceImpl implements MedicineService {
     }
 
     @Override
+    public List<MedicineDTO> getLowStockMedicines() {
+        LambdaQueryWrapper<Medicine> wrapper = new LambdaQueryWrapper<>();
+        wrapper.lt(Medicine::getStockQuantity, 10)
+               .orderByAsc(Medicine::getStockQuantity);
+        List<Medicine> medicines = medicineMapper.selectList(wrapper);
+        return medicines.stream().map(this::convertToDTO).collect(Collectors.toList());
+    }
+
+    @Override
     public double getDailyConsumption(Long medicineId) {
         LambdaQueryWrapper<MedicationSchedule> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(MedicationSchedule::getMedicineId, medicineId)

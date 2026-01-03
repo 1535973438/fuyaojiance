@@ -23,13 +23,18 @@ public class StatisticsController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
 
+        LocalDate today = LocalDate.now();
+        
         // 默认本周
         if (startDate == null) {
-            LocalDate today = LocalDate.now();
             startDate = today.with(DayOfWeek.MONDAY);
         }
         if (endDate == null) {
-            endDate = LocalDate.now();
+            // 默认结束日期为昨天（排除今天）
+            endDate = today.minusDays(1);
+        } else if (endDate.equals(today)) {
+            // 如果指定的结束日期是今天，则改为昨天（排除今天）
+            endDate = today.minusDays(1);
         }
 
         return Result.success(statisticsService.getCompletionRate(startDate, endDate));
