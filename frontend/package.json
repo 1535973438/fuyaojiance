@@ -1,0 +1,27 @@
+{
+  "name": "medication-tracker-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "vue": "^3.4.15",
+    "vue-router": "^4.2.5",
+    "pinia": "^2.1.7",
+    "vant": "^4.8.4",
+    "axios": "^1.6.5",
+    "echarts": "^5.4.3",
+    "dayjs": "^1.11.10"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.3",
+    "vite": "^5.0.11",
+    "unplugin-vue-components": "^0.26.0",
+    "@vant/auto-import-resolver": "^1.2.1",
+    "postcss-px-to-viewport-8-plugin": "^1.2.5"
+  }
+}
